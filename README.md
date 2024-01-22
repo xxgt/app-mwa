@@ -18,41 +18,49 @@ flowchart TD
 - mwa-down：实现mwa数据的广域网下载；
 - unpack：将原始产品数据的tar文件解包为单秒dat文件；
 - beam-make：按beam、指向，生成fits文件；
-- fits-merger：按指向，将同指向的24个beam的fits文件合并；
+- fits-merger：按指向，将同指向的24个beam fits文件合并；
 - presto：用presto软件对前述24beam的fits文件做脉冲搜索
 - 
-## 二、MWA流水线的相关数据量分析
+## 二、MWA流水线的相关数据量统计
 
 ### 2.1 原始产品数据(DIR_DAT)
 - 按时间戳（秒）打包的24通道数据（后缀名为tar），解包后文件后缀为.dat
-- 按观测数据集的数据量统计
+- 按观测集的数据量统计
   - 单个观测的时间长度：4800秒
   - 通道数：24个，109~132
   - 每个文件：327680000字节，313MiB
   - 文件总数：4800*24=115,200 个
   - 总数据量：3.775*10^13 B = 3.6*10^7 MiB ≈ 34.33 TiB
-- 按12000指向计，数据处理需读取数据总量为：12000 * 34.33TiB ≈ 402.3PiB
+- 按12960指向计，数据处理中需读取总量为：12960 * 34.33TiB ≈ 434.5 PiB
 
 ### 2.2 定标数据(DIR_CAL)
-- 按每个观测数据集来组织，还包含运行相关的元数据等
-- 按观测数据集的数据量
-  - 100MB以内
+- 按每个观测集来组织，还包含运行相关元数据等
+- 每个观测集的数据量
+  - 约72MiB
 
 ### 2.3 单指向、单通道的fits文件(DIR_1CH)
-- 合并时间序列的原始数据，通过make-beam生成的数据
-- 按观测数据集的单指向数据
-  - 单指向、单通道200秒fits文件大小：256440960 B ≈ 244.56 MiB
-  - 单指向单通道fits文件数量：24*4800/200=576个
-  - 总数据量：244.56 MiB * 576 ≈ 137.57 GiB，约为原始数据的0.4%
-- 按12000指向计，则总数据量为：12000 * 137.57 GiB ≈ 1.57PB
+- 合并时间序列的原始数据dat文件，通过make-beam生成的单通道数据的fits文件
+- 按观测集的单指向数据
+  - 单指向、单通道30秒fits文件大小：38479680 B ≈ 36.70 MiB (1.223 MiB/秒)
+  - 单指向单通道fits文件数量：24*4800/30=3840个
+  - 总数据量：36.70 MiB * 3840 ≈ 137.61 GiB，约为原始数据的0.39%
+- 按12960指向计，则总数据量为：12960 * 137.61 GiB ≈ 1.70 PiB
 
-### 2.4 单指向24通道fits文件(DIR_24CH)
-- 将单指向、单通道的fits文件合并为24通道的数据
-- 按观测数据集的单指向数据
-  - 单指向24通道200秒fits文件大小：6153860160 B ≈ 5.73 GiB
-  - 单指向24通道fits文件数量：4800/200=24个
-  - 总数据量：5.73 GiB * 24 ≈ 137.55 GiB
-- 按12000指向计，则总数据量为：12000 * 137.55 GiB ≈ 1.57PB
+### 2.4 单指向、单通道的下采样后fits文件(DIR_1CHX)
+- 针对DIR_1CH数据，在时间维上以1:4下采样，并以zstd压缩
+- 按观测集的单指向数据
+  - 单指向、单通道30秒fits文件大小：7.53 MiB (0.251 MB/秒)
+  - 单指向单通道fits文件数量：24*4800/30=3840个
+  - 总数据量：7.53 MiB * 3840 ≈ 28.24 GiB，约为原始数据的0.08%
+- 按12960指向计，则总数据量为：12960 * 28.24 GiB ≈ 357.41 TiB
+
+### 2.5 单指向24通道fits文件(DIR_24CH)
+- 将单指向、单通道的fits文件合并为24通道的数据，并用zstd压缩
+- 按观测集的单指向数据
+  - 单指向24通道30秒fits文件大小：181.18 MiB
+  - 单指向24通道fits文件数量：4800/30=160个
+  - 总数据量：181.18 MiB * 160 ≈ 28.31 GiB
+- 按12960指向计，则总数据量为：12960 * 28.31 GiB ≈ 358.29 TiB
   
 ### 2.5 presto搜索文件
 
@@ -61,7 +69,16 @@ flowchart TD
 #### ？
 
 ### 2.6 总结
-MWA数据处理过程中，读取的数据量达原始数据的千倍以上，达到百PiB规模，其I/O优化是数据处理流水线设计的关键。
+MWA数据处理过程中，读取的数据量达原始数据的万倍以上，达到百PiB规模，其I/O优化是数据处理流水线设计的关键。
+
+- 波束合成数据量统计表
+
+|  | 单通道单秒 | 单指向 | 全指向 |
+|-----------|--------|--------|----------|
+| DIR_DAT   | 313 MiB  | 34.33 TiB   | 434.5PiB |
+| DIR_1CH   | 1.223 MiB | 137.61 GiB | 1.70 PiB |
+| DIR_1CHX  | 0.251 MiB | 28.24 GiB  | 357.41 TiB |
+| DIR_24CH  |           | 28.31 GiB  | 358.29 TiB |
 
 ## 三、原型测试
 
@@ -69,14 +86,18 @@ MWA数据处理过程中，读取的数据量达原始数据的千倍以上，�
 - DCU计算节点
   - 4 DCU/节点
   - 128GB内存
-  - 100GB本地可用的SSD
+  - 120GB本地可用的SSD
 
 - 本地SSD加载原始观测产品数据、定标数据，并写入到本地SSD
 
 ### make-beam的初步测试结果
-- 单次处理指向数：建议在[20..80]区间，从计算过程与计算节点数量一致的角度看，可以取24的倍数（24、48、72、...）；如果节点数为24的约数（12、8、6、4、3、2、1），可以取与节点数相同。
+- 单次处理指向数：从计算过程与计算节点数量一致的角度看，可以取24的倍数（24、48、72、...）；如果节点数为24的约数（12、8、6、4、3、2、1），可以取与节点数相同。
 - 数据处理长度：2分钟到5分钟（上限还需考虑计算过程的GPU资源消耗、本地SSD容量、内存容量后，再确认）
-- 12000指向的单个观测数据集，处理时间预计为1600 DCU时
+- 12960指向的单个观测数据集，处理时间预计为1600 DCU时
+
+针对同一组原始数据，可以按24个指向为1组，对12960指向循环处理。
+
+关于参数选择的实验，参见：[beam-maker](dockerfiles/beam-maker/test/README.md)
 
 ## 四、MWA流水线设计
 
@@ -98,10 +119,39 @@ flowchart TD
 |  模块名 | 输入数据量  | 输出数据量 |
 |  ----  | ----  | ---- |
 | unpack     | 34.3TiB | 34.3TiB |
-| beam-maker | 400 PiB | 1.57 PiB | 
-| fits-merger | 1.57 PiB | 1.57 PiB | 
+| beam-maker | 434.5 PiB | 1.70 PiB |
+| fits-merger | 358.3 TiB | 358.3 TiB | 
 
-可以看出，beam-maker模块的读写数据规模极大，如何优化beam-maker模块是首要问题。
+可以看出，beam-maker模块的读写数据规模极大，优化该模块是首要问题。
+
+- 存储部件示意图
+
+```mermaid
+flowchart TD
+    A(CPU Cache) <--> C(Local Memory)
+    B(GPU Memroy)  <--> C
+    C <--> K(Local HDD)
+    C <--> D[Ethernet]
+    C <--> E[Infiniband]
+    C <--> F(Local SSD)
+    E <--> G(Remote Memory)
+    D <--> H(Remote HDD)
+    D <--> G
+    E <--> I(Remote SSD)
+```
+
+- 附表 数据访问链路中硬件部件的访问带宽、延时的典型数值范围
+
+|  部件名称 | 访问带宽  | 延时 |
+|  ----  | ----  | ---- |
+| CPU Cache | 100GB/s | 1ns |
+| GPU Memory | 100~300GB/s | 5~10ns |
+| Main Memory | 20~50GB/s | 10ns |
+| Infiniband | 5~20GB/s | 5us |
+| EtherNet | 1~10GB/s | 50us |
+| NVMe SSD | 4GB/s | 10us |
+| HDD | 200MB/s | 10ms |
+
 
 主要优化方法包括：
 - 减少网络存储访问；
@@ -129,18 +179,9 @@ flowchart TD
 
 ### 4.3 beam-maker 与 fits-merger
 
-按前面分析，输入数据量最大的模块为beam-maker，按12000指向的数据处理，单观测数据集的输入数据超过400PB。如果完全基于网络存储做数据读取，将会有极大的I/O存储性能瓶颈。为此设计利用本地磁盘、本地SSD、本地内存缓存的多层级的读取方式，提高加载效率。
+按前面分析，输入数据量最大的模块为beam-maker，按12960指向的数据处理，单观测数据集的输入数据超过400PiB。如果完全基于网络存储做数据读取，将会有极大的I/O存储性能瓶颈。为此设计利用本地磁盘、本地SSD、本地内存缓存的多层级的读取方式，提高加载效率。
 
-考虑到本地存储、本地内存的容量不同可能支持24通道的数据存储，目前的设计方案，将单个测试时间长度的24通道数据分别放在24个计算节点上，比如：
-
-以120秒数据，单次处理48指向，则：
-- 120秒数据的单通道数据量：313MiB * 120 ≈ 36.7GiB
-- beam-maker产生的单通道fits文件，没文件的数据量为原始数据的0.4%，其数据量为0.15 GiB，48指向合计7.2GiB
-- fits-merger生成合并后的fits文件，数据量也可以按7.2GiB计
-- 临时空间也按7.2GiB计
-- 单节点的总数据量：36.7 + 7.2 * 3 = 58.3 GiB
-
-针对同一组原始数据，可以按48个指向为1组，对12000指向进行循环处理。
+考虑到本地存储、本地内存的容量不同可能支持24通道的数据存储，目前的设计方案，将单个测试时间长度的24通道数据分布于24个计算节点上。
 
 ### 4.4 流水线示意图
 
@@ -164,40 +205,44 @@ flowchart TB
 ```mermaid
 
 flowchart TD
+  remote-dir-list --> mwa-down
+  mwa-down --> unpack
+  unpack --> repack
+  repack --> ftp-push-tar
+  repack --> cluster-copy-tar
   remote-dir-list --> ftp-pull-tar
-  remote-dir-list --> cluster-copy-tar
   ftp-pull-tar --> cluster-copy-tar
   dir-list --> cluster-copy-tar
   dir-list --> copy-unpack
   cluster-copy-tar --> copy-unpack
-  copy-unpack --> data-grouping-main_1
-  data-grouping-main_1 --> beam-maker
+  copy-unpack --> beam-maker
   beam-maker --> down-sampler
   down-sampler --> fits-dist
-  down-sampler --> data-grouping-main_2
-  fits-dist --> data-grouping-main_2
-  data-grouping-main_2 --> fits-merger
+  down-sampler --> fits-merger
+  fits-dist --> fits-merger
   fits-merger --> presto
-  subgraph cluster2
+  subgraph HPC
     dir-list
     cluster-copy-tar
     copy-unpack
     beam-maker
     down-sampler
     fits-dist
-    data-grouping-main_1
-    data-grouping-main_2
     fits-merger
     presto
   end
-  subgraph cluster1
+  subgraph prep-cluster
     remote-dir-list
     ftp-pull-tar
+    mwa-down
+    unpack
+    repack
+    ftp-push-tar
   end
-  
+
 ```
 
-如果不涉及到ftp的数据，可以用单集群，list-dir模块可以放在计算集群。
+如果不涉及到ftp的数据，可以用单集群，dir-list模块可以放在计算集群。
 - cluster-copy-tar: 从外部集群拷贝数据到计算集群共享存储；
 - copy-unpack：从计算集群共享存储，拷贝数据到节点存储；
 - copy-unpack、beam-maker、down-sampler、fits-dist、fits-merger都需指定为HOST-BOUND
@@ -211,3 +256,14 @@ flowchart TD
 - I/O优化
   - 打包文件布局调整，减少冗余的文件加载；通过打包，减少文件数量及I/O开销
   - 以scalebox支持内存缓存、本地SSD的文件加载，实现模块间存储共享，极大提升I/O能力
+
+## 五、MWA流水线测试结果
+
+- 测试环境：2节点，4DCU卡
+
+|  模块名 | 传统计算  | 本地计算 | 加速比 |
+|  ----  | ----| ----| ---- |
+| 波束合成<br/>beam-maker  | 10110.76| 744.11| 13.59|
+| 下采样<br/>down-sampler | 76.49| 3.67| 20.84|
+| fits合并<br/>fits-merger |  | 38.58| |
+

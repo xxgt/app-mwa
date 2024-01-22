@@ -14,8 +14,11 @@ PTTAIL=${my_arr[5]}
 let ii=$((10#${ch}))-108
 printf -v i "%02d" $ii
 
-DIR_CAL=/data/mwa/cal
-
+if [ $LOCAL_CAL_ROOT ]; then
+    DIR_CAL="/local${LOCAL_CAL_ROOT}/mwa/cal"
+else
+    DIR_CAL=/data/mwa/cal
+fi
 if [ $LOCAL_INPUT_ROOT ]; then
     DIR_DAT="/local${LOCAL_INPUT_ROOT}/mwa/dat"
 else
@@ -26,6 +29,7 @@ if [ $LOCAL_OUTPUT_ROOT ]; then
 else
     DIR_1CH=/data/mwa/1ch
 fi
+dat_dir="${DIR_DAT}/${OBSID}/ch${ch}/${BEG}_${END}"
 
 # 加载UTT等元数据信息
 source ${DIR_CAL}/${OBSID}/mb_meta.env
@@ -40,7 +44,7 @@ cd /work
 make_beam -o ${OBSID} -b ${BEG} -e ${END} \
         -P ${POINTS} \
         -z ${UTT} \
-        -d ${DIR_DAT}/${OBSID} -f ${ch} \
+        -d ${dat_dir} -f ${ch} \
         -m ${DIR_CAL}/${OBSID}/metafits_ppds.fits \
         -F ${DIR_CAL}/${OBSID}/flagged_tiles.txt \
         -J ${DIR_CAL}/${OBSID}/DI_JonesMatrices_node0${i}.dat \
@@ -52,8 +56,7 @@ code=$?
 # 将生成的fits文件转移到规范目录下
 declare -i i=0
 point_arr=($(echo $POINTS | tr "," "\n" ))
-for ii in $(seq $PTHEAD $PTTAIL);
-do
+for ii in $(seq $PTHEAD $PTTAIL); do
     pi=$(printf "%05d" $ii)
     dest_file_r=${OBSID}/${BEG}_${END}/${pi}/ch${ch}.fits
     dest_file=${DIR_1CH}/${dest_file_r}
@@ -80,12 +83,25 @@ echo '{
 }' > /work/task-exec.json
 
 if [ -n "$KEEP_SOURCE_FILE" ] && [ "$KEEP_SOURCE_FILE" = "no" ]; then
+    # only used for test
     echo "remove dat files"
-    for ((n=BEG; n<=END; n++)); do
-        file_name="${OBSID}/${OBSID}_${n}_ch${ch}.dat"
-        echo "file_name to remove:${DIR_DAT}/${file_name}"
-        rm -f "${DIR_DAT}/${file_name}"
+    # for ((n=BEG; n<=END; n++)); do
+    #     file_name="${OBSID}/${OBSID}_${n}_ch${ch}.dat"
+    #     echo "file_name to remove:${DIR_DAT}/${file_name}"
+    #     rm -f "${DIR_DAT}/${file_name}"
+    # done
+    rm -rf ${dat_dir}
+fi
+
+# 仅用于实验环境中单节点的压力测试，测试完成后删除目标文件（fits文件）
+if [ "$KEEP_TARGET_FILE" = "no" ]; then
+    for ii in $(seq $PTHEAD $PTTAIL); do
+        pi=$(printf "%05d" $ii)
+        dest_file_r=${OBSID}/${BEG}_${END}/${pi}/ch${ch}.fits
+        dest_file=${DIR_1CH}/${dest_file_r}
+        rm -f $dest_file
     done
+    rm -f /work/output-files.txt
 fi
 
 exit $code

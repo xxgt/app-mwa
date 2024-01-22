@@ -1,12 +1,12 @@
-app-create:
+app-create: clean
 	make -C ~/scalebox/server clean-agents
-	rm -rf ~/.scalebox/var/*
-	ssh node1 rm -rf /tmp/scalebox/ /dev/shm/scalebox/
-	ssh node2 rm -rf /tmp/scalebox/ /dev/shm/scalebox/
-	
 	make -C message-router-go
-	scalebox app create -e dcu-local-mode.env
+	#	scalebox app create -e dcu-local-mode.env
+	scalebox app create -e dcu.env
 
-clean-main:
-	cd /raid0/scalebox/mydata/ && \
-	sudo rm -rf mwa/*
+clean:
+	# local-mode
+	ssh node1 rm -rf /tmp/scalebox/mydata/mwa/dat/ /dev/shm/scalebox/mydata/mwa/{1ch,1chx,24ch}/ /dev/shm/scalebox/copy-unpack/
+	ssh node2 rm -rf /tmp/scalebox/mydata/mwa/dat/ /dev/shm/scalebox/mydata/mwa/{1ch,1chx,24ch}/ /dev/shm/scalebox/copy-unpack/
+	# non-local-mode
+	rm -rf /raid0/scalebox/mydata/mwa/{1ch,1chx,24ch,dat}/
