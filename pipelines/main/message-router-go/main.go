@@ -16,12 +16,12 @@ var (
 		"":         defaultFunc,
 		"dir-list": fromDirList,
 		// "dir-list":           fromDirListTest,
-		"copy-unpack":      fromCopyUnpack,
-		"cluster-copy-tar": fromClusterCopyTar,
-		"beam-maker":       fromBeamMaker,
-		"down-sampler":     fromDownSampler,
-		"fits-dist":        fromFitsDist,
-		"fits-merger":      fromFitsMerger,
+		"unpack":       fromUnpack,
+		"cluster-copy": fromClusterCopy,
+		"beam-maker":   fromBeamMaker,
+		"down-sampler": fromDownSampler,
+		"fits-dist":    fromFitsDist,
+		"fits-merger":  fromFitsMerger,
 	}
 )
 
@@ -81,31 +81,31 @@ func defaultFunc(message string, headers map[string]string) int {
 	return 0
 }
 
-func fromCopyUnpack(message string, headers map[string]string) int {
+func fromUnpack(message string, headers map[string]string) int {
 	// 	1257010784/1257010784_1257010790_ch120.dat
-	re := regexp.MustCompile("^([0-9]+)/([0-9]+)_([0-9]+)_ch([0-9]{3}).dat$")
+	re := regexp.MustCompile("^([0-9]+)_([0-9]+)_ch([0-9]{3}).dat$")
 	ss := re.FindStringSubmatch(message)
 	if ss == nil {
 		fmt.Fprintf(os.Stderr, "[WARN]message:%s not valid format in fromCopyUnpack()\n", message)
 		return 11
 	}
 
-	// 1257010784/1257010784_1257010790/112
+	// 1257010784_1257010790_ch112.dat
 	dataset := getDataSet(ss[1])
 	if dataset == nil {
 		fmt.Fprintf(os.Stderr, "[WARN] unknown dataset:%s in fromCopyUnpack()\n", ss[1])
 		return 12
 	}
 
-	t, _ := strconv.Atoi(ss[3])
+	t, _ := strconv.Atoi(ss[2])
 	t0, t1 := dataset.getTimeRange(t)
-	sema := fmt.Sprintf("dat-ready:%s/%d_%d/%s", ss[1], t0, t1, ss[4])
+	sema := fmt.Sprintf("dat-ready:%s/%d_%d/%s", ss[1], t0, t1, ss[3])
 
 	if n := countDown(sema); n == 0 {
-		channel, _ := strconv.Atoi(ss[4])
+		channel, _ := strconv.Atoi(ss[3])
 		for b, e := range getPointingRanges() {
-			m := fmt.Sprintf("%s/%d_%d/%s/%05d_%05d", ss[1], t0, t1, ss[4], b, e)
-			ret := sendNodeAwareMessage(m, "beam-maker", channel-109)
+			m := fmt.Sprintf("%s/%d_%d/%s/%05d_%05d", ss[1], t0, t1, ss[3], b, e)
+			ret := sendNodeAwareMessage(m, make(map[string]string), "beam-maker", channel-109)
 			if ret != 0 {
 				return ret
 			}
@@ -115,7 +115,7 @@ func fromCopyUnpack(message string, headers map[string]string) int {
 	return 0
 }
 
-func fromClusterCopyTar(message string, headers map[string]string) int {
+func fromClusterCopy(message string, headers map[string]string) int {
 	// 1257010784/1257010786_1257010815_ch109.dat.zst.tar
 	ss := regexp.MustCompile("([0-9]+)/([0-9]+)_[0-9]+_ch([0-9]{3})").FindStringSubmatch(message)
 	if ss == nil {
@@ -129,7 +129,7 @@ func fromClusterCopyTar(message string, headers map[string]string) int {
 
 	m := fmt.Sprintf("/data/mwa/tar~%s~%d_%d", message, b, e)
 
-	return sendNodeAwareMessage(m, "copy-unpack", channel-109)
+	return sendNodeAwareMessage(m, make(map[string]string), "unpack", channel-109)
 }
 
 func fromBeamMaker(message string, headers map[string]string) int {
@@ -147,7 +147,7 @@ func fromBeamMaker(message string, headers map[string]string) int {
 	}
 
 	ch, _ := strconv.Atoi(ss[2])
-	return sendNodeAwareMessage(message, "down-sampler", ch-109)
+	return sendNodeAwareMessage(message, make(map[string]string), "down-sampler", ch-109)
 }
 
 func fromDownSampler(message string, headers map[string]string) int {
@@ -237,12 +237,16 @@ func toFitsMerger(message string, headers map[string]string) int {
 	if n := countDown(sema); n == 0 {
 		// 1257010784/1257010786_1257010815/00022
 		pointing, _ := strconv.Atoi(ss[2])
-		return sendNodeAwareMessage(ss[1], "fits-merger", pointing-1)
+		return sendNodeAwareMessage(ss[1], make(map[string]string), "fits-merger", pointing-1)
 	}
 
 	return 0
 }
 
 func fromFitsMerger(message string, headers map[string]string) int {
-	return 0
+	// 1257010784/00022/1257010786_1257010815
+	ss := strings.Split(message, "/")
+	pointing, _ := strconv.Atoi(ss[1])
+	fmt.Printf("pointing:%d\n", pointing)
+	return sendNodeAwareMessage(message, make(map[string]string), "presto-search", pointing-1)
 }

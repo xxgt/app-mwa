@@ -1,8 +1,13 @@
-dirs:=beam-maker copy-unpack down-sampler fits-merger repack unpack
+dirs:=mwa-vcstools unpack down-sampler presto-search repack unpack
 
 build:
 	@for dir in $(dirs); do \
 		$(MAKE) -C $$dir build; \
+	done
+
+singularity:
+	@for dir in $(dirs); do \
+		$(MAKE) -C $$dir singularity; \
 	done
 
 push:

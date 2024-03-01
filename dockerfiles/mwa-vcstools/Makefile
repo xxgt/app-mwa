@@ -1,4 +1,4 @@
-IMAGE_NAME:=app-mwa/down-sampler:latest
+IMAGE_NAME:=app-mwa/mwa-vcstools:rocm-4.0.1
 # set default dir
 SINGULARITY_DIR ?= /raid0/root/singularity
 
@@ -7,13 +7,13 @@ build:
 
 singularity:
 	mkdir -p ~/singularity/app-mwa/
-	rm -f ~/singularity/app-mwa/down-sampler.sif
+	rm -f ~/singularity/app-mwa/mwa-vcstools.sif
 	date
-	singularity build ~/singularity/app-mwa/down-sampler.sif docker-daemon://$(IMAGE_NAME)
+	singularity build ~/singularity/app-mwa/mwa-vcstools.sif docker-daemon://$(IMAGE_NAME)
 	date
 
 	mkdir -p $(SINGULARITY_DIR)/app-mwa/
-	mv -f ~/singularity/app-mwa/down-sampler.sif $(SINGULARITY_DIR)/app-mwa/
+	mv -f ~/singularity/app-mwa/mwa-vcstools.sif $(SINGULARITY_DIR)/app-mwa/
 
 dist:
 	@# docker save $(IMAGE_NAME) | zstdmt | pv | ssh c0 'zstd -d | docker load'
@@ -24,6 +24,7 @@ dist:
 	ssh node2 'zstd -dc /raid0/tmp/my.img.zst | docker load'
 	# ssh node3 'zstd -dc /raid0/tmp/my.img.zst | docker load'
 	ssh node4 'zstd -dc /raid0/tmp/my.img.zst | docker load'
+	# pdsh -w node[123] -l root 'zstd -dc /raid0/tmp/my.img.zst | docker load' | dshbak -c
 	@ date
 
 push:
@@ -31,6 +32,3 @@ push:
 
 clean:
 	docker rmi $(IMAGE_NAME)
-
-all: build dist
-

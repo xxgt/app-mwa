@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -18,7 +19,8 @@ var (
 	// 每次观测最大序列号
 	// maxSequence int
 
-	hosts            = []string{"10.11.16.79", "10.11.16.80"}
+	hosts = []string{"10.11.16.80", "10.11.16.75"}
+	// hosts            = []string{"10.11.16.79", "10.11.16.80", "10.11.16.76", "10.11.16.75"}
 	numNodesPerGroup int
 
 	localMode bool
@@ -48,7 +50,8 @@ func init() {
 
 	numNodesPerGroup, err = strconv.Atoi(os.Getenv("NUM_NODES_PER_GROUP"))
 	if err != nil || numNodesPerGroup == 0 {
-		numNodesPerGroup = 24
+		// numNodesPerGroup = 24
+		numNodesPerGroup = len(hosts)
 	}
 
 	pBegin, err = strconv.Atoi(os.Getenv("POINTING_BEGIN"))
@@ -72,7 +75,7 @@ func init() {
 	localMode = os.Getenv("LOCAL_MODE") == "yes"
 }
 
-func sendNodeAwareMessage(message string, sinkJob string, num int) int {
+func sendNodeAwareMessage(message string, headers map[string]string, sinkJob string, num int) int {
 	if !localMode {
 		scalebox.AppendToFile("/work/messages.txt", sinkJob+","+message)
 		return 0
@@ -80,6 +83,15 @@ func sendNodeAwareMessage(message string, sinkJob string, num int) int {
 
 	toHost := hosts[num%numNodesPerGroup]
 	cmdTxt := fmt.Sprintf("scalebox task add --sink-job %s --to-ip %s %s", sinkJob, toHost, message)
+	if len(headers) > 0 {
+		h, err := json.Marshal(headers)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "headers:%v,JSON marshaling failed:%v\n", headers, err)
+		} else {
+			cmdTxt = fmt.Sprintf("scalebox task add --sink-job %s --to-ip %s --headers '%s' %s", sinkJob, toHost, h, message)
+		}
+	}
+
 	fmt.Printf("cmd-text:%s\n", cmdTxt)
 	code, stdout, stderr := scalebox.ExecShellCommandWithExitCode(cmdTxt, 10)
 	fmt.Printf("stdout for task-add:\n%s\n", stdout)

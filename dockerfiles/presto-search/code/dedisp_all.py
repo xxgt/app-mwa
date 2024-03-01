@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/python3
 import sys, os
 ###############################################
 # This script is modified from disperse.py to #
@@ -53,6 +53,7 @@ if __name__ == '__main__':
         subcalls.append(int(line[7]))
         startDMs.append(float(line[0]))
         dmspercalls.append(int(line[6]))
+        
 
 # Loop over the DDplan plans
     try:
@@ -83,10 +84,13 @@ if __name__ == '__main__':
 
                 
                 # call prepsubband_gpu to process the file
-                myexecute("realfft *.dat")
-                myexecute("rm -f *.dat")
-                myexecute("ls *.fft | xargs -n 1 accelsearch_gpu_4 -cuda 0 " + searchargs)
-                myexecute("rm -f *.fft")
+                myexecute("date --iso-8601=ns >> /work/timestamps.txt")
+        myexecute("realfft *.dat | grep time")
+        # myexecute("rm -f *.dat")
+        myexecute("ls *.fft | xargs -n 1 accelsearch_gpu_4 -cuda 0 " + searchargs + "| grep Total")
+        myexecute("du . -sh")
+        myexecute("rm -f *.fft")
+        myexecute("date --iso-8601=ns >> /work/timestamps.txt")
     except:
         exit(1)
 

@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// 性能测试专用，绕过将全局存储拷贝到本机存储的copy-unpack模块
+// 性能测试专用，绕过将全局存储拷贝到本机存储的unpack模块
 func fromDirListTest(message string, headers map[string]string) int {
 	fmt.Println("input-message:", message)
 
@@ -35,7 +35,7 @@ func fromDirListTest(message string, headers map[string]string) int {
 	channel := 110
 	for i := b; i <= e; i++ {
 		m := fmt.Sprintf("dat,%s/%s_%d_ch%d.dat", ds, ds, i, channel)
-		sendNodeAwareMessage(m, sinkJob, channel-109)
+		sendNodeAwareMessage(m, make(map[string]string), sinkJob, channel-109)
 	}
 	return 0
 }

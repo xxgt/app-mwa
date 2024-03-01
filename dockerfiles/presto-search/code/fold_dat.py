@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/python3
 import sys, os
 
 def myexecute(cmd):
@@ -9,6 +9,7 @@ outsubs = False
 
 if __name__ == '__main__':
     # read the file name to be processed
+    cnt = 0
     filename = sys.argv[1]
     # get the file name without the extension
     basename = filename.split('.')[0]
@@ -25,7 +26,8 @@ if __name__ == '__main__':
             # else if the line starts with format "$basename_DM_xx_*:num" then split it into a list
             elif line.startswith(basename):
                 params = line.split()
-                dm = float(params[1])
+                dm = params[1]
                 p = float(params[7])/1000.0
-
-                myexecute("prepfold_gpu -noxwin -dm %.3f -p %.6f %s -o %s"%(dm, p, filename, basename))
+                cnt += 1
+                myexecute("prepfold_gpu -noxwin -p %.6f -o %s %s_DM%s.dat "%(p, basename, basename, dm))
+    print(cnt)

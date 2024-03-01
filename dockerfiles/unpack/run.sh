@@ -1,45 +1,74 @@
 #!/bin/bash
-#传参：tar文件路径
-result=$(echo "$1" | awk -F "%" '{print $2}')
-echo $result
-input_file="/local"${SOURCE_URL}/$result
-InputBytes=$(stat --printf="%s" ${input_file})
-echo $InputBytes
-#获取文件名
-in_file=$(basename ${input_file})
-cd /work
-#复制文件到当前目录
-cp ${input_file} .
-#path=$(dirname "$1")
-#work_1是暂存解压后的dat文件，在zst压缩过程会删除
-#如果文件夹不存在，则创建文件夹
-if [ ! -d "work_1" ]; then
-mkdir work_1
-fi
-tar -xf ${in_file} -C /work/work_1
-#tar -xvf $1 -C $path/work_1
-exit_code=$?
-output_dir="/local"$OUTPUT_URL     # 指定输出目录
-if [ ! -d "$output_dir" ]; then
-  # 目录不存在，使用mkdir命令创建多级目录
-  mkdir -p "$output_dir"
+
+# /raid0/scalebox/mydata/mwa/tar~1257010784/1257010786_1257010815_ch121.dat.zst.tar~1257010786_1257010875
+m=$1
+
+arr=($(echo $m | tr "~" " ")) 
+
+if [[ ${arr[1]} =~ ^([0-9]+)/([0-9]+)_([0-9]+)_ch([0-9]{3}).dat.zst.tar$ ]]; then
+    dataset=${BASH_REMATCH[1]}
+    begin=${BASH_REMATCH[2]}
+    end=${BASH_REMATCH[3]}
+    ch=${BASH_REMATCH[4]}
 else
-  echo "多级目录已存在"
+    echo "[ERROR] Invalid input message:$1" >&2 && exit 5
 fi
-rm -f ${in_file}
-cd work_1
-for myfile in ./*
-do
-filename=$(basename "$myfile")
-zstd --rm "$myfile" -o "${output_dir}/${filename}.zst"
-exit_code=$?
-groupfilename="zst,${output_dir}/${filename}.zst"
-#传给分组
-echo "data-grouping-fits,${groupfilename}" >> /work/messages.txt
-#python3 /app/bin/run.py $groupfilename
-exit_code=$?
+
+if [ $LOCAL_OUTPUT_ROOT ]; then
+    DIR_DAT="/local${LOCAL_OUTPUT_ROOT}/mwa/dat"
+else
+    DIR_DAT=/data/mwa/dat
+fi
+
+if [[ ${arr[0]} == /data* ]]; then
+    tar_file="${arr[0]}/${arr[1]}"
+else
+    tar_file="/local${arr[0]}/${arr[1]}"
+fi
+
+tmp_dir="/local/dev/shm/scalebox/copy-unpack"
+target_dir="${DIR_DAT}/${dataset}/ch${ch}/${arr[2]}"
+
+echo source_file:$tar_file
+echo target_dir:$target_dir
+
+[ "$KEEP_SOURCE_FILE" = "no" ] && echo $tar_file >> $WORK_DIR/removed-files.txt
+
+mkdir -p $tmp_dir $target_dir && cd $tmp_dir && tar xf $tar_file
+code=$?
+[[ $code -ne 0 ]] && echo "error untar file:$tar_file" >&2 && exit $code
+
+echo "[INFO]tmp_dir=$tmp_dir"
+ls -l $tmp_dir/*.zst
+
+for f in $(ls *.zst); do
+    zstd -d -f --output-dir-flat=$target_dir --rm $f
+    code=$?
+    if [[ $code -ne 0 ]]; then 
+        zstd -d -f --output-dir-flat=$target_dir --rm $f
+        code=?
+    fi
+    [[ $code -ne 0 ]] && echo "error unzstd file:$f" >&2 && exit $code
 done
-echo '{
-     "inputBytes":'${InputBytes}'
-}' > /work/task-exec.json
-exit ${exit_code}
+
+# Read error (39) : premature end 
+
+# 删除临时文件
+rm -f $tmp_dir/*
+cd $target_dir && chmod 644 *.dat
+
+[[ $code -ne 0 ]] && echo "error copy-unpack file:$f" >&2 && exit $code
+
+# /raid0/scalebox/mydata/mwa/tar~1257010784/1257010786_1257010815_ch132.dat.zst.tar
+# 1257010784/1257010784_1257010801_ch132.dat
+for ((n=$begin; n<=$end; n++))
+do
+    echo "${dataset}_${n}_ch${ch}.dat" >> ${WORK_DIR}/messages.txt
+    # echo "${DIR_DAT}/${dataset}/${dataset}_${n}_ch${ch}.dat" >> ${WORK_DIR}/output-files.txt
+    echo "${target_dir}/${dataset}_${n}_ch${ch}.dat" >> ${WORK_DIR}/output-files.txt
+    echo "output-file: ${target_dir}/${dataset}_${n}_ch${ch}.dat"
+done
+
+echo $tar_file >> ${WORK_DIR}/input-files.txt
+
+exit $code

@@ -4,16 +4,6 @@
 m=$1
 # m="1257010784/1257010986_1257011185/132/00001_00003"
 
-my_arr=($(echo $m | tr "_" "\n" | tr "/" "\n"))
-OBSID=${my_arr[0]}
-BEG=${my_arr[1]}
-END=${my_arr[2]}
-ch=${my_arr[3]}
-PTHEAD=${my_arr[4]}
-PTTAIL=${my_arr[5]}
-let ii=$((10#${ch}))-108
-printf -v i "%02d" $ii
-
 if [ $LOCAL_CAL_ROOT ]; then
     DIR_CAL="/local${LOCAL_CAL_ROOT}/mwa/cal"
 else
@@ -29,6 +19,17 @@ if [ $LOCAL_OUTPUT_ROOT ]; then
 else
     DIR_1CH=/data/mwa/1ch
 fi
+
+my_arr=($(echo $m | tr "_" "\n" | tr "/" "\n"))
+OBSID=${my_arr[0]}
+BEG=${my_arr[1]}
+END=${my_arr[2]}
+ch=${my_arr[3]}
+PTHEAD=${my_arr[4]}
+PTTAIL=${my_arr[5]}
+let ii=$((10#${ch}))-108
+printf -v i "%02d" $ii
+
 dat_dir="${DIR_DAT}/${OBSID}/ch${ch}/${BEG}_${END}"
 
 # 加载UTT等元数据信息
@@ -40,7 +41,8 @@ echo UTT=${UTT}
 PTLIST=${DIR_CAL}/${OBSID}/pointings.txt
 POINTS=$(awk "NR>=${PTHEAD} && NR<=${PTTAIL} {printf \"%s\", \$0; if (NR!=${PTTAIL}) printf \",\"}" ${PTLIST})
 
-cd /work
+cd ${WORK_DIR}
+
 make_beam -o ${OBSID} -b ${BEG} -e ${END} \
         -P ${POINTS} \
         -z ${UTT} \
@@ -60,15 +62,15 @@ for ii in $(seq $PTHEAD $PTTAIL); do
     pi=$(printf "%05d" $ii)
     dest_file_r=${OBSID}/${BEG}_${END}/${pi}/ch${ch}.fits
     dest_file=${DIR_1CH}/${dest_file_r}
-    orig_file=/work/${point_arr[${i}]}/*.fits
+    orig_file=${WORK_DIR}/${point_arr[${i}]}/*.fits
 
     mkdir -p $(dirname ${dest_file}) && mv $orig_file $dest_file
     code=$?
     [[ $code -ne 0 ]] && echo "exit after mkdir and mv, dest_file:$dest_file, error_code:$code" && exit $code
     # 输出消息 
-    echo $dest_file_r >> /work/messages.txt
+    echo $dest_file_r >> ${WORK_DIR}/messages.txt
     # 统计输出文件的字节数
-    echo $dest_file >> /work/output-files.txt
+    echo $dest_file >> ${WORK_DIR}/output-files.txt
 
     i=$((i + 1))
 done
@@ -80,7 +82,7 @@ file_length=327680000
 input_bytes=$(( (num_files+1) * file_length * num_points ))
 echo '{
     "inputBytes":'${input_bytes}'
-}' > /work/task-exec.json
+}' > ${WORK_DIR}/task-exec.json
 
 if [ -n "$KEEP_SOURCE_FILE" ] && [ "$KEEP_SOURCE_FILE" = "no" ]; then
     # only used for test
@@ -94,14 +96,13 @@ if [ -n "$KEEP_SOURCE_FILE" ] && [ "$KEEP_SOURCE_FILE" = "no" ]; then
 fi
 
 # 仅用于实验环境中单节点的压力测试，测试完成后删除目标文件（fits文件）
-if [ "$KEEP_TARGET_FILE" = "no" ]; then
-    for ii in $(seq $PTHEAD $PTTAIL); do
-        pi=$(printf "%05d" $ii)
-        dest_file_r=${OBSID}/${BEG}_${END}/${pi}/ch${ch}.fits
-        dest_file=${DIR_1CH}/${dest_file_r}
-        rm -f $dest_file
-    done
-    rm -f /work/output-files.txt
-fi
+# if [ "$KEEP_TARGET_FILE" = "no" ]; then
+#     for ii in $(seq $PTHEAD $PTTAIL); do
+#         pi=$(printf "%05d" $ii)
+#         dest_file_r=${OBSID}/${BEG}_${END}/${pi}/ch${ch}.fits
+#         dest_file=${DIR_1CH}/${dest_file_r}
+#         rm -f $dest_file
+#     done
+# fi
 
 exit $code

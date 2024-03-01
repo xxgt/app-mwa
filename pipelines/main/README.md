@@ -74,3 +74,41 @@ ${DIR_24CH}
 | 300 | 91.55  | 2197.27  | 28.8  | 57.6  | 86.4  | 14400 |
 | 330 | 100.71  | 2416.92  | 31.68  | 63.36  | 95.04  | 15840 |
 | 360 | 109.86  | 2636.64  | 34.56  | 69.12  | 103.68 | 17280 |
+
+
+
+## 操作步骤
+
+- 导入dataset
+
+```sh
+CLUSTER=dcu scalebox app create dataset.yaml
+```
+
+- 将cal目录拷贝到本机缓存中
+
+```sh
+
+scp -r cal node3:/dev/shm/scalebox/mydata/mwa/
+
+```
+
+- 启动应用
+```sh
+make
+```
+
+## rsync-copy的镜像转为singularity
+
+```sh
+
+mkdir -p ~/singularity/scalebox/
+rm -f ~/singularity/scalebox/rsync-copy.sif
+date
+singularity build ~/singularity/scalebox/rsync-copy.sif docker-daemon://hub.cstcloud.cn/scalebox/rsync-copy:latest
+date
+
+mkdir -p /raid0/root/singularity/scalebox/
+mv -f ~/singularity/scalebox/rsync-copy.sif /raid0/root/singularity/scalebox/
+
+```

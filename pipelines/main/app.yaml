@@ -3,19 +3,20 @@ label: mwa-comput-${NUM_POINTINGS_PER_CALC}
 cluster: ${CLUSTER}
 parameters:
   initial_status: RUNNING
-  default_message_router: message-router-main
+  message_router: message-router-main
 
 jobs:
   dir-list:
     base_image: hub.cstcloud.cn/scalebox/dir-list
     cluster: ${CLUSTER_LOCAL}
-    schedule_mode: HEAD
+    parameters:
+      slot_on_head: yes
     environments:
       - REGEX_FILTER=${REGEX_FILTER}
       # - REGEX_2D_DATASET=${REGEX_DAT}
       # - INDEX_2D_DATASET=${INDEX_DAT}
 
-  cluster-copy-tar:
+  cluster-copy:
     base_image: hub.cstcloud.cn/scalebox/rsync-copy
     cluster: ${CLUSTER_LOCAL}
     variables:
@@ -28,42 +29,44 @@ jobs:
     hosts:
       - h0:2
 
-  local-copy-tar:
+  local-copy:
     # keep source file controlled by message-router
     base_image: ${LOCAL_COPY_TAR}
-    queue_mode: ${QUEUE_MODE}
+    parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
     variables:
       max_sleep_count: 10
       task_timeout_seconds: 1800
+    environments:
+      - LOCAL_OUTPUT_ROOT=${LOCAL_SHM_ROOT}
     hosts:
-      -  n[01]:1
+      -  ${NODES}:1
 
-  copy-unpack:
-    base_image: ${COPY_UNPACK}
-    queue_mode: ${QUEUE_MODE}
+  unpack:
+    base_image: ${UNPACK}
     # node1上的文件读取错误，需设置特权权限。可能更新该节点上docker到最新版本可解决该问题
     command: ${UNPACK_COMMAND}
     variables:
       max_sleep_count: 10
-      task_timeout_seconds: ${COPY_UNPACK_TIMEOUT}
+      task_timeout_seconds: ${UNPACK_TIMEOUT}
+      dir_limit_gb: ${UNPACK_DIR_LIMIT_GB}
     parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
       # /data/mwa/tar~1257010784/1257010846_1257010875_ch120.dat.zst.tar
       key_group_regex: ${REGEX_TAR}
       key_group_index: 1,3,2
 #      key_group_index: 1,2,3
     environments:
-      # - LOCAL_INPUT_ROOT=${LOCAL_DISK_ROOT}
+      - LOCAL_INPUT_ROOT=${LOCAL_SHM_ROOT}
       - LOCAL_OUTPUT_ROOT=${LOCAL_DISK_ROOT}
       - KEEP_SOURCE_FILE=yes
-      - DIR_LIMIT_GB=${UNPACK_DIR_LIMIT_GB}
     hosts:
-      - n[01]:1
+      - ${NODES}:1
 
   beam-maker:
     label: beam-maker
-    base_image: ${BEAM_MAKER}
-    queue_mode: ${QUEUE_MODE}
-    command: ${ROCM_COMMAND}
+    base_image: ${MWA_VCSTOOLS}
+    command: ${ROCM_COMMAND_P1}
     # command: docker run -d --rm
     #     --group-add video 
     #     --device /dev/kfd 
@@ -74,8 +77,10 @@ jobs:
     variables:
       max_sleep_count: 10
       task_timeout_seconds: ${BEAM_MAKER_TIMEOUT}
+      code_path: ${CODE_BASE}/dockerfiles/mwa-vcstools/beam-maker/code
       # output_text_size: 1048576
     parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
       slot_timeout_seconds: 60
       # 1257010784/1257010806_1257010815/131/00001_00003
       key_group_regex: ^([0-9]+)/([0-9]+_[0-9]+)/([0-9]{3})/[0-9]{5}_[0-9]{5}$
@@ -89,48 +94,49 @@ jobs:
       # 压力测试专用
       # - KEEP_TARGET_FILE=no
     hosts:
-      - n[01]:2
+      - ${NODES}:1
 
   down-sampler:
     base_image: ${DOWN_SAMPLER}
-    queue_mode: ${QUEUE_MODE}
     variables:
       # 1-min
       max_sleep_count: 10
       task_timeout_seconds: ${DOWN_SAMPLER_TIMEOUT}
     parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
       slot_timeout_seconds: 60
     environments:
-      - KEEP_SOURCE_FILE=${KEEP_SOURCE_FILE}
+      - KEEP_SOURCE_FILE=no
       - LOCAL_INPUT_ROOT=${LOCAL_SHM_ROOT}
       - LOCAL_OUTPUT_ROOT=${LOCAL_SHM_ROOT}
     hosts:
-      - n[01]:1
+      - ${NODES}:1
 
   # push 
   fits-dist:
     base_image: ${FITS_DIST}
-    queue_mode: ${QUEUE_MODE}
     variables:
     # 1-min
       max_sleep_count: 10
       task_timeout_seconds: 60
     parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
       slot_timeout_seconds: 60
     environments:
       - KEEP_SOURCE_FILE=no
     hosts:
-      - n[01]:1
+      - ${NODES}:1
 
   fits-merger:
     label: 24通道fits合并
-    base_image: ${FITS_MERGER}
-    queue_mode: ${QUEUE_MODE}
+    base_image: ${MWA_VCSTOOLS}
     variables:
     # 1-min
       max_sleep_count: 10
       task_timeout_seconds: ${FITS_MERGER_TIMEOUT}
+      code_path: ${CODE_BASE}/dockerfiles/mwa-vcstools/fits-merger/code
     parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
       # 1257010784/1257010786_1257010795/00001
       key_group_regex: ^([0-9]+)/([0-9]+_[0-9]+)/[0-9]{5}$
       key_group_index: 1,2,3
@@ -139,25 +145,45 @@ jobs:
       - LOCAL_INPUT_ROOT=${LOCAL_SHM_ROOT}
       - LOCAL_OUTPUT_ROOT=${LOCAL_SHM_ROOT}
     hosts:
-      - n[01]:1
+      - ${NODES}:1
+
+  presto-search:
+    label: presto-search
+    base_image: ${PRESTO_SEARCH}
+    command: ${ROCM_COMMAND}
+    variables:
+    # 1-min
+      max_sleep_count: 10
+      task_timeout_seconds: ${PRESTO_SEARCH_TIMEOUT}
+      output_text_size: 1048576
+      code_path: ${CODE_BASE}/dockerfiles/presto-search/code
+    parameters:
+      task_dist_mode: ${TASK_DIST_MODE}
+      # 1257010784/1257010786_1257010795/00001
+    environments:
+      - KEEP_SOURCE_FILE=${KEEP_SOURCE_FILE}
+      - LOCAL_INPUT_ROOT=${LOCAL_SHM_ROOT}
+      - LOCAL_OUTPUT_ROOT=${LOCAL_SHM_ROOT}
+    hosts:
+      - ${NODES}:2
 
   message-router-main:
     label: 主消息路由
     base_image: app-mwa/message-router-go
     cluster: ${CLUSTER_LOCAL}
-    schedule_mode: HEAD
     variables:
       max_sleep_count: 10
     parameters:
+      slot_on_head: yes
       key_group_regex:
       key_group_index:
-      start_message: ${START_MESSAGE}
+      start_message: ${DATASET_URI}
       visiable: no
     environments:
-      - NUM_PER_GROUP=${NUM_PER_GROUP}
+      # - NUM_PER_GROUP=${NUM_PER_GROUP}
       - LOG_LEVEL=warn
       - LOCAL_MODE=${LOCAL_MODE}
-      - NUM_NODES_PER_GROUP=2
+      - NUM_NODES_PER_GROUP=
       # 指向起始号
       - POINTING_BEGIN=${POINTING_BEGIN}
       # 指向结束号
@@ -169,9 +195,9 @@ jobs:
       # - TRACE=yes
     sink_jobs:
       - dir-list
-      - cluster-copy-tar
-      - local-copy-tar
-      - copy-unpack
+      - cluster-copy
+      - local-copy
+      - unpack
       - beam-maker
       - down-sampler
       - fits-dist
